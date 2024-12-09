@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Maui.Controls;
+using Newtonsoft.Json;
+using ShoppingList.Models;
 
 namespace ShoppingList.Views;
 
@@ -13,10 +17,82 @@ public partial class NewAccountPage : ContentPage
         InitializeComponent();
         Title = "Create New Account";
     }
-
-    private void CreateAccount_OnClicked(object sender, EventArgs e)
+    
+    private bool IsValidEmail(string email)
     {
-        App.SessionKey = "aaa";
-        Navigation.PopModalAsync();
+        int atIndex = email.IndexOf('@');
+        int dotIndex = email.IndexOf('.', atIndex); 
+
+        
+        return atIndex > 0 && dotIndex > atIndex;
+    }
+
+    async void CreateAccount_OnClicked(object sender, EventArgs e)
+    {
+        //do passwords match
+        if (txtPassword1.Text != txtPassword2.Text)
+        {
+            await DisplayAlert("Error", "Passwords do not match!", "OK");
+            return;
+        }
+        
+        //is email valid = @ .
+        if (!IsValidEmail(txtEmail.Text))
+        {
+            await DisplayAlert("Error", "Please enter a valid email address.", "OK");
+            return;
+        }
+        
+        
+        //api stuff
+        var data = JsonConvert.SerializeObject(new UserAccount(txtUser.Text, txtPassword1.Text, txtEmail.Text));
+
+        var client = new HttpClient();
+        var response = await client.PostAsync(new Uri("https://joewetzel.com/fvtc/account/createuser"),
+            new StringContent(data, Encoding.UTF8, "application/json"));
+
+        var AccountStatus = response.Content.ReadAsStringAsync().Result;
+
+        
+        
+        //does the user exist?
+
+        if (AccountStatus == "user exists")
+        {
+            await DisplayAlert("Error", "Sorry this username has been taken!", "OK");
+            return;
+        }
+        
+        //is the email in use?
+        if (AccountStatus == "email exists")
+        {
+           await DisplayAlert("Error", "Sorry this email has already been used!", "OK");
+            return;
+        }
+        
+        if (AccountStatus == "complete")
+        {
+            response = await client.PostAsync(new Uri("https://joewetzel.com/fvtc/account/login"),
+                new StringContent(data, Encoding.UTF8, "application/json"));
+
+            var SKey = response.Content.ReadAsStringAsync().Result;
+
+            if (!string.IsNullOrEmpty((SKey)) && SKey.Length < 50 )
+            {
+                App.SessionKey = SKey;
+                Navigation.PopModalAsync();
+            }
+            else
+            {
+                await DisplayAlert("Error", "Sorry there was an issue logging in.", "OK");
+            }
+            
+        }
+        else
+        {
+            await DisplayAlert("Error", "Sorry an error occurred creating your account.", "OK");
+        }
+        
+        
     }
 }
